@@ -1,0 +1,19 @@
+opencv-python
+pyserial
+numpy
+pandas
+scikit-learn
+tensorflow
+matplotlib
+
+#open terminal in this folder and run this below command to install simultaneously
+#pip install -r requirements.txt
+
+#💡 This will install:
+
+#opencv-python → camera + image processing
+#pyserial → Arduino communication
+#numpy / pandas → data handling
+#scikit-learn → machine learning models
+#tensorflow → deep learning / image classification
+#matplotlib → optional plotting/debugging

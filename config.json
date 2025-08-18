@@ -1,0 +1,17 @@
+{
+    "serial_port": "COM3",
+    "baud_rate": 9600,
+    "servo_pin": 9,
+    "angles": {
+      "bin_a": 30,
+      "bin_b": 150,
+      "bin_a1": 60,
+      "bin_b1": 120
+    },
+    "nir_thresholds": {
+      "brix_min": 16,
+      "polyphenol_min": 150
+    },
+    "skip_nir_confidence": 0.92
+  }
+  
