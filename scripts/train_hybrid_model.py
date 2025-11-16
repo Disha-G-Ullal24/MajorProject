@@ -11,7 +11,8 @@ from tqdm import tqdm
 import os
 
 # -------------------- SETTINGS --------------------
-data_dir = "data/images"
+# Replace this with your absolute dataset path
+data_dir = r"C:\Users\Disha G Ullal\Desktop\Disha Engineering\Projects\major project\MajorProject\data\images"
 batch_size = 32
 feature_path = "models"
 os.makedirs(feature_path, exist_ok=True)
@@ -28,14 +29,23 @@ transform = transforms.Compose([
 ])
 
 # -------------------- DATASET --------------------
+if not os.path.exists(data_dir):
+    raise ValueError(f"Dataset directory does not exist: {data_dir}")
+
 dataset = datasets.ImageFolder(data_dir, transform=transform)
+
+if len(dataset.classes) == 0:
+    raise ValueError(f"No class folders found in {data_dir}. Make sure you have subfolders for each class.")
+
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-print(f"Loaded {len(dataset)} images across {len(dataset.classes)} classes: {dataset.classes}")
+print(f"✅ Loaded {len(dataset)} images across {len(dataset.classes)} classes: {dataset.classes}")
 
 # -------------------- CNN FEATURE EXTRACTOR --------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
+# Load MobileNetV2 with pretrained weights
 base_model = models.mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1)
 base_model.classifier = nn.Identity()  # remove final FC layer
 base_model = base_model.to(device)
@@ -69,4 +79,4 @@ joblib.dump(rf, rf_path)
 
 print(f"✅ CNN feature extractor saved to: {cnn_path}")
 print(f"✅ Random Forest model saved to: {rf_path}")
-print("Hybrid training complete.")
+print("🎉 Hybrid training complete.")
