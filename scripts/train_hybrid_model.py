@@ -11,7 +11,7 @@ from tqdm import tqdm
 import os
 
 # -------------------- SETTINGS --------------------
-data_dir = "data/images/train"
+data_dir = "data/images"
 batch_size = 32
 feature_path = "models"
 os.makedirs(feature_path, exist_ok=True)
