@@ -62,7 +62,7 @@ def classify_frame(frame):
         features = base_model(img_tensor).cpu().numpy()
         pred_label = rf_model.predict(features)[0]
     
-    class_names = ['BadGrapes', 'GoodGrapes']  # must match dataset
+    class_names = ['BadGrapes', 'GoodGrapes']
     result = class_names[pred_label]
     return result
 
@@ -71,7 +71,7 @@ cap = cv2.VideoCapture(0)
 if not cap.isOpened():
     raise RuntimeError("Webcam not found!")
 
-print("📷 Press 'q' to quit real-time classification.")
+print("📷 Press 'SPACE' or 'S' to capture image and classify. Press 'Q' to quit.")
 
 while True:
     ret, frame = cap.read()
@@ -79,29 +79,41 @@ while True:
         print("⚠️ Failed to grab frame")
         break
 
-    result = classify_frame(frame)
-
-    # Save result to CSV
-    file_exists = os.path.isfile(RESULTS_FILE)
-    with open(RESULTS_FILE, mode='a', newline='') as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(['Timestamp', 'Prediction'])
-        writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), result])
-
-    # Send to Arduino
-    if arduino:
-        arduino.write(b'G' if result == "GoodGrapes" else b'B')
-
-    # Display prediction on frame
-    color = (0, 255, 0) if result == "GoodGrapes" else (0, 0, 255)
-    cv2.putText(frame, result, (30, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+    # Draw a rectangle in the center (ROI for grape)
+    h, w, _ = frame.shape
+    x1, y1 = w//2 - 100, h//2 - 100
+    x2, y2 = w//2 + 100, h//2 + 100
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
 
     cv2.imshow("Grape Classification", frame)
+    key = cv2.waitKey(1) & 0xFF
 
-    # Quit when 'q' is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    # Capture & classify when SPACE or 'S' is pressed
+    if key == ord(' ') or key == ord('s'):
+        roi = frame[y1:y2, x1:x2]
+        result = classify_frame(roi)
+        print(f"Prediction: {result}")
+
+        # Save result to CSV
+        file_exists = os.path.isfile(RESULTS_FILE)
+        with open(RESULTS_FILE, mode='a', newline='') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(['Timestamp', 'Prediction'])
+            writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), result])
+
+        # Send to Arduino
+        if arduino:
+            arduino.write(b'G' if result == "GoodGrapes" else b'B')
+
+        # Display prediction on frame temporarily
+        cv2.putText(frame, result, (30, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0) if result=="GoodGrapes" else (0,0,255), 2)
+        cv2.imshow("Grape Classification", frame)
+        cv2.waitKey(1000)  # Show prediction for 1 second
+
+    # Quit when 'Q' is pressed
+    if key == ord('q'):
         break
 
 cap.release()
