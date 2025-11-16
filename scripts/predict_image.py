@@ -1,33 +1,44 @@
 import cv2
 import torch
 import torch.nn as nn
-import torchvision.transforms as transforms
-from torchvision import models
+from torchvision import models, transforms
 from PIL import Image
 import serial
 import time
+import numpy as np
+import joblib
+import os
+import csv
+from datetime import datetime
 
 # ---------------- PARAMETERS ----------------
-IMG_SIZE = (128, 128)
-MODEL_PATH = r"D:\Major_project\Project_code\MajorProject\models\grape_mobilenetv2.pth"
-IMAGE_PATH = "captured/grape_0.jpg"
+IMG_SIZE = (224, 224)  # matches training
+CNN_PATH = r"models/cnn_extractor.pth"
+RF_PATH = r"models/rf_model.pkl"
+IMAGE_PATH = "captured/grape_0.jpg"  # can be updated dynamically
 SERIAL_PORT = 'COM3'
 BAUD_RATE = 9600
+RESULTS_FILE = "grape_results.csv"  # stores predictions
 
 # ---------------- DEVICE ----------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# ---------------- LOAD MODEL ----------------
-model = models.mobilenet_v2(weights=None)
-model.classifier[1] = nn.Linear(model.last_channel, 1)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-model.to(device)
-model.eval()
+# ---------------- LOAD CNN FEATURE EXTRACTOR ----------------
+base_model = models.mobilenet_v2(weights=None)
+base_model.classifier = nn.Identity()
+base_model.load_state_dict(torch.load(CNN_PATH, map_location=device))
+base_model.to(device)
+base_model.eval()
+
+# ---------------- LOAD RANDOM FOREST ----------------
+rf_model = joblib.load(RF_PATH)
 
 # ---------------- TRANSFORMS ----------------
 transform = transforms.Compose([
     transforms.Resize(IMG_SIZE),
     transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225])
 ])
 
 # ---------------- CONNECT TO ARDUINO ----------------
@@ -40,24 +51,35 @@ except:
     print("⚠️ Arduino not connected!")
 
 # ---------------- LOAD AND PROCESS IMAGE ----------------
-img = cv2.imread(IMAGE_PATH)
-if img is None:
+if not os.path.exists(IMAGE_PATH):
     print("❌ Error: Image not found at", IMAGE_PATH)
     exit()
 
-img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-img_pil = Image.fromarray(img_rgb)
-img_tensor = transform(img_pil).unsqueeze(0).to(device)
+img = Image.open(IMAGE_PATH).convert("RGB")
+img_tensor = transform(img).unsqueeze(0).to(device)
 
-# ---------------- PREDICT ----------------
+# ---------------- EXTRACT FEATURES ----------------
 with torch.no_grad():
-    output = torch.sigmoid(model(img_tensor))
-prediction = output.item()
-result = "GOOD" if prediction > 0.5 else "BAD"
+    features = base_model(img_tensor).cpu().numpy()
 
-print(f"Result: {result} (Confidence: {prediction:.2f})")
+# ---------------- PREDICT USING RANDOM FOREST ----------------
+pred_label = rf_model.predict(features)[0]
+class_names = ['BadGrapes', 'GoodGrapes']  # must match dataset folder names
+result = class_names[pred_label]
+
+print(f"Result: {result}")
+
+# ---------------- SAVE RESULT TO CSV ----------------
+file_exists = os.path.isfile(RESULTS_FILE)
+with open(RESULTS_FILE, mode='a', newline='') as f:
+    writer = csv.writer(f)
+    if not file_exists:
+        writer.writerow(['ImageName', 'Prediction', 'Timestamp'])
+    writer.writerow([os.path.basename(IMAGE_PATH), result, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+
+print(f"✅ Result saved to {RESULTS_FILE}")
 
 # ---------------- SEND TO ARDUINO ----------------
 if arduino:
-    arduino.write(b'G' if result == "GOOD" else b'B')
-    print("✅ Sent to Arduino:", "G" if result == "GOOD" else "B")
+    arduino.write(b'G' if result == "GoodGrapes" else b'B')
+    print("✅ Sent to Arduino:", "G" if result == "GoodGrapes" else "B")
