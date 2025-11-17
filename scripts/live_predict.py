@@ -17,7 +17,7 @@ CNN_PATH = os.path.join(BASE_DIR, "models", "cnn_extractor.pth")
 RF_PATH = os.path.join(BASE_DIR, "models", "rf_model.pkl")
 IMG_SIZE = (224, 224)
 RESULTS_FILE = os.path.join(BASE_DIR, "grape_results.csv")
-SERIAL_PORT = 'COM3'
+SERIAL_PORT = 'COM5'
 BAUD_RATE = 9600
 
 # ---------------- DEVICE -----------------

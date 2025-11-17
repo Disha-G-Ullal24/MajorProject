@@ -16,7 +16,7 @@ IMG_SIZE = (224, 224)  # matches training
 CNN_PATH = r"models/cnn_extractor.pth"
 RF_PATH = r"models/rf_model.pkl"
 IMAGE_PATH = "captured/grape_0.jpg"  # can be updated dynamically
-SERIAL_PORT = 'COM3'
+SERIAL_PORT = 'COM5'
 BAUD_RATE = 9600
 RESULTS_FILE = "grape_results.csv"  # stores predictions
 

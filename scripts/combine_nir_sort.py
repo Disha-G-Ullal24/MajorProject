@@ -7,7 +7,7 @@ import time
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # MajorProject/
 PRED_FILE = os.path.join(BASE_DIR, "grape_results.csv")        # Hybrid model predictions
 NIR_FILE = os.path.join(BASE_DIR, "data", "nir", "nir_data.csv")  # NIR features
-SERIAL_PORT = 'COM3'
+SERIAL_PORT = 'COM5'
 BAUD_RATE = 9600
 MERGED_FILE = os.path.join(BASE_DIR, "grape_final_results.csv")   # Output file
 
