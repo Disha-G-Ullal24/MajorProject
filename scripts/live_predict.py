@@ -10,14 +10,16 @@ from datetime import datetime
 import serial
 import time
 import numpy as np
+import pandas as pd
 
 # ---------------- PARAMETERS -----------------
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # MajorProject/
 CNN_PATH = os.path.join(BASE_DIR, "models", "cnn_extractor.pth")
 RF_PATH = os.path.join(BASE_DIR, "models", "rf_model.pkl")
+NIR_FILE = os.path.join(BASE_DIR, "data", "nir", "nir_data.csv")
 IMG_SIZE = (224, 224)
 RESULTS_FILE = os.path.join(BASE_DIR, "grape_results.csv")
-SERIAL_PORT = 'COM5'
+SERIAL_PORT = 'COM3'
 BAUD_RATE = 9600
 
 # ---------------- DEVICE -----------------
@@ -35,6 +37,16 @@ print("✅ CNN loaded successfully.")
 # ---------------- LOAD RANDOM FOREST -----------------
 rf_model = joblib.load(RF_PATH)
 print("✅ Random Forest loaded successfully.")
+
+# ---------------- LOAD NIR DATA -----------------
+if not os.path.exists(NIR_FILE):
+    raise FileNotFoundError(f"NIR data file not found: {NIR_FILE}")
+
+nir_df = pd.read_csv(NIR_FILE)
+
+# Ensure NIR data is numeric and exclude non-numeric columns
+nir_features_array = nir_df.select_dtypes(include=np.number).values
+print(f"✅ NIR features loaded, shape: {nir_features_array.shape}")
 
 # ---------------- IMAGE TRANSFORM -----------------
 transform = transforms.Compose([
@@ -54,17 +66,23 @@ except:
     print("⚠️ Arduino not connected!")
 
 # ---------------- FUNCTION TO CLASSIFY FRAME -----------------
-def classify_frame(frame):
+def classify_frame(frame, nir_features):
     img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     img_tensor = transform(img_pil).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        features = base_model(img_tensor).cpu().numpy()
+        cnn_features = base_model(img_tensor).cpu().numpy()
+        nir_features = np.array(nir_features, dtype=float).reshape(1, -1)
+        features = np.concatenate([cnn_features, nir_features], axis=1)
+
+        # Verify feature length matches RF training
+        if features.shape[1] != rf_model.n_features_in_:
+            raise ValueError(f"Feature size mismatch! RF expects {rf_model.n_features_in_}, got {features.shape[1]}")
+
         pred_label = rf_model.predict(features)[0]
-    
+
     class_names = ['BadGrapes', 'GoodGrapes']
-    result = class_names[pred_label]
-    return result
+    return class_names[pred_label]
 
 # ---------------- START CAMERA -----------------
 cap = cv2.VideoCapture(0)
@@ -73,13 +91,14 @@ if not cap.isOpened():
 
 print("📷 Press 'SPACE' or 'S' to capture image and classify. Press 'Q' to quit.")
 
+nir_index = 0  # to select corresponding NIR row for each frame
+
 while True:
     ret, frame = cap.read()
     if not ret:
         print("⚠️ Failed to grab frame")
         break
 
-    # Draw a rectangle in the center (ROI for grape)
     h, w, _ = frame.shape
     x1, y1 = w//2 - 100, h//2 - 100
     x2, y2 = w//2 + 100, h//2 + 100
@@ -88,10 +107,17 @@ while True:
     cv2.imshow("Grape Classification", frame)
     key = cv2.waitKey(1) & 0xFF
 
-    # Capture & classify when SPACE or 'S' is pressed
     if key == ord(' ') or key == ord('s'):
         roi = frame[y1:y2, x1:x2]
-        result = classify_frame(roi)
+
+        if nir_index >= len(nir_features_array):
+            print("⚠️ No more NIR data available, using last row")
+            nir_features = nir_features_array[-1]
+        else:
+            nir_features = nir_features_array[nir_index]
+            nir_index += 1
+
+        result = classify_frame(roi, nir_features)
         print(f"Prediction: {result}")
 
         # Save result to CSV
@@ -108,11 +134,11 @@ while True:
 
         # Display prediction on frame temporarily
         cv2.putText(frame, result, (30, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0) if result=="GoodGrapes" else (0,0,255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 1,
+                    (0, 255, 0) if result=="GoodGrapes" else (0,0,255), 2)
         cv2.imshow("Grape Classification", frame)
-        cv2.waitKey(1000)  # Show prediction for 1 second
+        cv2.waitKey(1000)
 
-    # Quit when 'Q' is pressed
     if key == ord('q'):
         break
 

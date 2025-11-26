@@ -7,7 +7,7 @@ import time
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # MajorProject/
 PRED_FILE = os.path.join(BASE_DIR, "grape_results.csv")        # Hybrid model predictions
 NIR_FILE = os.path.join(BASE_DIR, "data", "nir", "nir_data.csv")  # NIR features
-SERIAL_PORT = 'COM5'
+SERIAL_PORT = 'COM3'
 BAUD_RATE = 9600
 MERGED_FILE = os.path.join(BASE_DIR, "grape_final_results.csv")   # Output file
 
@@ -31,16 +31,31 @@ if not os.path.exists(NIR_FILE):
 pred_df = pd.read_csv(PRED_FILE)
 nir_df = pd.read_csv(NIR_FILE)
 
-# ---------------- MERGE ON IMAGE NAME ----------------
+# ---------------- CLEAN AND RENAME COLUMNS ----------------
+# Ensure first column in each CSV is ImageName and second column is Prediction
+pred_df.columns = ["ImageName", "Prediction"] + list(pred_df.columns[2:])
+nir_df.columns = ["ImageName", "Brix", "pH"] + list(nir_df.columns[3:])
+
+# Convert ImageName to string
+pred_df["ImageName"] = pred_df["ImageName"].astype(str)
+nir_df["ImageName"] = nir_df["ImageName"].astype(str)
+
+# ---------------- MERGE ----------------
 merged_df = pd.merge(pred_df, nir_df, on="ImageName", how="left")
 
+# Check column names after merge
+print("Merged columns:", merged_df.columns.tolist())
+
 # ---------------- DECISION LOGIC ----------------
-# Example logic: If predicted GOOD and Brix >= 15 and pH <= 3.8 -> GOOD, else BAD
 def final_decision(row):
-    if row['Prediction'] == "GoodGrapes" and row['Brix'] >= 15 and row['pH'] <= 3.8:
-        return "GOOD"
-    else:
-        return "BAD"
+    try:
+        if row['Prediction'] == "GoodGrapes" and row['Brix'] >= 15 and row['pH'] <= 3.8:
+            return "GOOD"
+        else:
+            return "BAD"
+    except KeyError:
+        # fallback if Brix/pH not present
+        return "GOOD" if row.get('Prediction', '') == "GoodGrapes" else "BAD"
 
 merged_df['FinalPrediction'] = merged_df.apply(final_decision, axis=1)
 
@@ -50,10 +65,10 @@ for idx, row in merged_df.iterrows():
     if arduino:
         arduino.write(command)
         print(f"{row['ImageName']} -> {row['FinalPrediction']} sent to Arduino: {command.decode()}")
-        time.sleep(0.5)  # small delay for servo to move
+        time.sleep(0.5)
     else:
         print(f"{row['ImageName']} -> {row['FinalPrediction']} (Arduino not connected)")
 
-# ---------------- SAVE FINAL MERGED RESULTS ----------------
+# ---------------- SAVE RESULTS ----------------
 merged_df.to_csv(MERGED_FILE, index=False)
 print(f"✅ Final merged results saved to {MERGED_FILE}")
